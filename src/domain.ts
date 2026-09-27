@@ -1,4 +1,4 @@
-import type { CropVariant, FrameDocument, Ratio } from './model';
+import type { CropVariant, Ratio } from './model';
 
 const clamp = (value: number, min = 0, max = 1): number => Math.min(max, Math.max(min, value));
 
@@ -48,10 +48,4 @@ export function resizeCrop(crop: CropVariant, width: number, height: number): Cr
 
 export function makeVariant(crop: CropVariant, id: string): CropVariant {
   return { ...normalizeCrop(crop), id };
-}
-
-export function isFrameDocument(value: unknown): value is FrameDocument {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<FrameDocument>;
-  return candidate.version === 1 && typeof candidate.guides === 'object' && candidate.crop !== undefined && Array.isArray(candidate.variants);
 }

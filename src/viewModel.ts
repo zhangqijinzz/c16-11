@@ -36,8 +36,24 @@ export class FrameSenseViewModel {
   async initialize(): Promise<void> {
     this.patch({ phase: 'loading', notice: '正在恢复上次工作状态…', error: null });
     try {
-      const document = this.repository.load();
-      this.patch({ document, phase: document.image ? 'editing' : 'ready', notice: document.image ? '已恢复上次工作状态' : '欢迎来到 FrameSense，先载入示例或导入图片。' });
+      const outcome = this.repository.load();
+      const { document } = outcome;
+      let notice: string;
+      switch (outcome.status) {
+        case 'empty':
+          notice = '欢迎来到 FrameSense，先载入示例或导入图片。';
+          break;
+        case 'clean':
+          notice = document.image ? '已恢复上次工作状态' : '欢迎来到 FrameSense，先载入示例或导入图片。';
+          break;
+        case 'repaired':
+          notice = `已恢复上次工作状态，部分历史数据已自动修复（${outcome.notes.join(' ')}）`;
+          break;
+        case 'reset':
+          notice = '历史数据无法识别，已重置为空白工作台，可以重新开始。';
+          break;
+      }
+      this.patch({ document, phase: document.image ? 'editing' : 'ready', notice });
     } catch {
       this.patch({ phase: 'error', notice: '未能读取历史状态，可继续新建工作。', error: '本地数据读取失败。' });
     }
