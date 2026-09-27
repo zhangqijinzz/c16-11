@@ -2,6 +2,8 @@ export type GuideKey = 'thirds' | 'center' | 'diagonal' | 'golden';
 export type Phase = 'loading' | 'ready' | 'editing' | 'error';
 export type Ratio = 'free' | '1:1' | '4:5' | '16:9';
 
+export const GUIDE_KEYS: readonly GuideKey[] = ['thirds', 'center', 'diagonal', 'golden'];
+
 export interface ImageAsset {
   src: string;
   width: number;

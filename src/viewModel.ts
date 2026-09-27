@@ -1,10 +1,32 @@
 import { useState, useSyncExternalStore } from 'react';
 import { cropForRatio, makeVariant, moveCrop, resizeCrop } from './domain';
+import type { RestoreResult } from './migration';
 import { EMPTY_DOCUMENT, type FrameDocument, type GuideKey, type Ratio, type ViewState } from './model';
 import type { FrameRepository } from './repository';
 import type { ImageService } from './service';
 
 type Listener = () => void;
+
+/** 存档检查发现的问题 -> 面向用户的说明文案。 */
+const ISSUE_LABELS: Record<string, string> = {
+  version: '版本标记缺失',
+  image: '图片信息不完整',
+  guides: '辅助层记录缺失',
+  subject: '主体标记无效',
+  crop: '裁切范围缺失或越界',
+  'crop-id': '裁切框标记缺失',
+  variants: '方案列表损坏',
+  variant: '部分裁切方案越界',
+  'variant-id': '方案标识缺失',
+  'variant-quarantined': '存在无法识别的方案条目',
+};
+
+function describeRestore(result: RestoreResult): string {
+  const labels = result.issues.map((issue) => ISSUE_LABELS[issue]).filter(Boolean);
+  const detail = labels.length > 0 ? `（已处理：${[...new Set(labels)].join('、')}）` : '';
+  const isolated = result.quarantined.length > 0 ? `，${result.quarantined.length} 个异常方案已单独隔离` : '';
+  return `历史存档存在缺失或异常，已自动补齐后打开${detail}${isolated}。`;
+}
 
 export class FrameSenseViewModel {
   private state: ViewState = { phase: 'loading', document: structuredClone(EMPTY_DOCUMENT), compareOpen: false, notice: '', error: null };
@@ -35,12 +57,38 @@ export class FrameSenseViewModel {
 
   async initialize(): Promise<void> {
     this.patch({ phase: 'loading', notice: '正在恢复上次工作状态…', error: null });
+    let result: RestoreResult;
     try {
-      const document = this.repository.load();
-      this.patch({ document, phase: document.image ? 'editing' : 'ready', notice: document.image ? '已恢复上次工作状态' : '欢迎来到 FrameSense，先载入示例或导入图片。' });
+      result = this.repository.load();
     } catch {
-      this.patch({ phase: 'error', notice: '未能读取历史状态，可继续新建工作。', error: '本地数据读取失败。' });
+      this.patch({
+        document: structuredClone(EMPTY_DOCUMENT),
+        phase: 'ready',
+        notice: '',
+        error: '本地数据读取失败，已降级为干净的空工作台，可继续新建工作。',
+      });
+      return;
     }
+
+    if (result.status === 'corrupted') {
+      // 结构完全无法识别：坏数据不带入编辑状态，明确告知用户。
+      this.patch({
+        document: result.document,
+        phase: 'ready',
+        notice: '',
+        error: '历史存档已损坏且无法识别结构，已降级为干净的空工作台。原数据未被覆盖，可手动检查本地存储。',
+      });
+      return;
+    }
+
+    const { document } = result;
+    const phase = document.image ? 'editing' : 'ready';
+    if (result.status === 'repaired') {
+      this.patch({ document, phase, notice: '', error: describeRestore(result) });
+      return;
+    }
+
+    this.patch({ document, phase, notice: document.image ? '已恢复上次工作状态' : '欢迎来到 FrameSense，先载入示例或导入图片。', error: null });
   }
 
   async importImage(file: File): Promise<void> {
